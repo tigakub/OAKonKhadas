@@ -1,6 +1,7 @@
 #include "OAKonKhadas.hpp"
 
 #include <opencv2/opencv.hpp>
+#include <sys/poll.h>
 
 bool OAKonKhadas::extendedDisparity = false;
 bool OAKonKhadas::subpixel = false;
@@ -109,8 +110,8 @@ void OAKonKhadas::start() {
         commandThread = new thread(
             [this] {
                 this_thread::sleep_for(chrono::milliseconds(5000));
-                cout << "Type \"quit\" or \"exit\" on this command line to terminate." << endl;
-                cout << "Press 'd' in the view window to view depth telemetry, and 'r' to view RGB telemetry." << endl;
+                cout << "\n\nEnter \"quit\" or \"exit\" on this command line to terminate." << endl;
+                cout << "Press 'd' in the view window to view depth telemetry,\n'r' to view RGB telemetry,\nor 'q' to quit.\n" << endl;
                 do { 
                     this->command(); 
                 } while(this->alive); 
@@ -156,6 +157,9 @@ void OAKonKhadas::loop() {
     }
     int key = cv::waitKey(1);
     switch(tolower(key)) {
+        case 'q':
+            stop();
+            break;
         case 'r':
             mode = RGB;
             break;
@@ -168,8 +172,22 @@ void OAKonKhadas::loop() {
 void OAKonKhadas::command() {
     string cmd;
     cout << "OoK > ";
-    getline(cin, cmd);
-    processCommand(cmd);
+    cout.flush();
+
+    struct pollfd fds;
+    fds.fd = 0;
+    fds.events = POLLIN;
+    int ret = 0;
+    
+    while(alive && !ret) {
+        ret = poll(&fds, 1, 0);
+        if(ret) {
+            getline(cin, cmd);
+            processCommand(cmd);
+        }
+    }
+
+    if(!ret) cout << endl;
 }
 
 void OAKonKhadas::processCommand(const string &iCommand) {
