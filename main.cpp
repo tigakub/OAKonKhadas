@@ -1,14 +1,14 @@
 #include <iostream>
 
-#include "Xoxe.hpp"
+#include "OAKonKhadas.hpp"
 
 using namespace std;
 using namespace dai;
 
 int main(int, char**) {
-    cout << "Xoxe starting ..." << endl;
-    Xoxe xoxe;
-    xoxe.start();
-    cout << "Xoxe terminating ..." << endl;
+    cout << "OAKonKhadas starting ..." << endl;
+    OAKonKhadas oak;
+    oak.start();
+    cout << "OAKonKhadas terminating ..." << endl;
     return 0;
 }
