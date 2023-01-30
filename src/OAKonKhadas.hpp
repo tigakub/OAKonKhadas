@@ -44,8 +44,24 @@ class OAKonKhadas {
         Pipeline pipeline;
         shared_ptr<node::ColorCamera> camRGB = nullptr;
         shared_ptr<node::XLinkOut> xoutRGB = nullptr;
+        shared_ptr<node::MonoCamera> camMonoLeft = nullptr;
+        shared_ptr<node::MonoCamera> camMonoRight = nullptr;
+        shared_ptr<node::StereoDepth> stereoDepth = nullptr;
+        shared_ptr<node::XLinkOut> xoutDepth = nullptr;
 
         shared_ptr<DataOutputQueue> rgbQ = nullptr;
+        shared_ptr<DataOutputQueue> depthQ = nullptr;
+
+        static bool extendedDisparity;
+        static bool subpixel;
+        static bool lrCheck;
+
+        typedef enum Mode {
+            RGB = 1,
+            DEPTH = 2
+        } Mode;
+
+        atomic<Mode> mode;
 
     public:
         OAKonKhadas(const string &iDXLPortPath = "/dev/serial/by-id/usb-Xevelabs_USB2AX_8583130383535101B2E0-if00", int iLoopPeriod = 33);

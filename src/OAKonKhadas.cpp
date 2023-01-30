@@ -2,13 +2,22 @@
 
 #include <opencv2/opencv.hpp>
 
+bool OAKonKhadas::extendedDisparity = false;
+bool OAKonKhadas::subpixel = false;
+bool OAKonKhadas::lrCheck = true;
+
 OAKonKhadas::OAKonKhadas(const string &iDXLPortPath, int iLoopPeriod)
 : alive(false), loopPeriod(iLoopPeriod),
   loopThread(nullptr), commandThread(nullptr),
   portHandler(nullptr), packetHandler(nullptr),
   pipeline(),
   camRGB(nullptr), xoutRGB(nullptr),
-  rgbQ(nullptr) { 
+  camMonoLeft(nullptr), camMonoRight(nullptr),
+  stereoDepth(nullptr),
+  xoutDepth(nullptr),
+  rgbQ(nullptr),
+  depthQ(nullptr),
+  mode(RGB) { 
     portHandler = PortHandler::getPortHandler(iDXLPortPath.c_str());
     packetHandler = PacketHandler::getPacketHandler(1.0);
     if(portHandler && portHandler->openPort()) {
@@ -16,7 +25,7 @@ OAKonKhadas::OAKonKhadas(const string &iDXLPortPath, int iLoopPeriod)
     } else {
         cerr << "Failed to open port to USB2AX" << endl;
     }
-}
+  }
 
 OAKonKhadas::~OAKonKhadas() {
     stop();
@@ -37,8 +46,30 @@ void OAKonKhadas::start() {
     camRGB->setInterleaved(false);
     camRGB->setColorOrder(ColorCameraProperties::ColorOrder::RGB);
 
+    camMonoLeft = pipeline.create<node::MonoCamera>();
+    camMonoRight = pipeline.create<node::MonoCamera>();
+    stereoDepth = pipeline.create<node::StereoDepth>();
+    xoutDepth = pipeline.create<node::XLinkOut>();
+
+    xoutDepth->setStreamName("depth");
+
+    camMonoLeft->setResolution(MonoCameraProperties::SensorResolution::THE_400_P);
+    camMonoRight->setResolution(MonoCameraProperties::SensorResolution::THE_400_P);
+    camMonoLeft->setBoardSocket(CameraBoardSocket::LEFT);
+    camMonoRight->setBoardSocket(CameraBoardSocket::RIGHT);
+
+    stereoDepth->setDefaultProfilePreset(node::StereoDepth::PresetMode::HIGH_DENSITY);
+    stereoDepth->initialConfig.setMedianFilter(MedianFilter::KERNEL_7x7);
+    stereoDepth->setLeftRightCheck(lrCheck);
+    stereoDepth->setExtendedDisparity(extendedDisparity);
+    stereoDepth->setSubpixel(subpixel);
+
     // Linking
     camRGB->preview.link(xoutRGB->input);
+
+    camMonoLeft->out.link(stereoDepth->left);
+    camMonoRight->out.link(stereoDepth->right);
+    stereoDepth->disparity.link(xoutDepth->input);
 
     // Connect to device and start pipeline
     Device device(pipeline, UsbSpeed::SUPER);
@@ -50,7 +81,7 @@ void OAKonKhadas::start() {
     cout << endl;
 
     // Print USB speed
-    cout << "Usb speed: " << device.getUsbSpeed() << endl;
+    cout << "USB speed: " << device.getUsbSpeed() << endl;
 
     // Bootloader version
     if(device.getBootloaderVersion()) {
@@ -61,6 +92,7 @@ void OAKonKhadas::start() {
     cout << "Device name: " << device.getDeviceName() << endl;
     
     rgbQ = device.getOutputQueue("rgb", 4, false);
+    depthQ = device.getOutputQueue("depth", 4, false);
 
     if(!loopThread) {
         loopThread = new thread(
@@ -72,9 +104,13 @@ void OAKonKhadas::start() {
             }
         );
     }
+
     if(!commandThread) {
         commandThread = new thread(
             [this] {
+                this_thread::sleep_for(chrono::milliseconds(5000));
+                cout << "Type \"quit\" or \"exit\" on this command line to terminate." << endl;
+                cout << "Press 'd' in the view window to view depth telemetry, and 'r' to view RGB telemetry." << endl;
                 do { 
                     this->command(); 
                 } while(this->alive); 
@@ -108,11 +144,24 @@ void OAKonKhadas::wait() {
 }
 
 void OAKonKhadas::loop() {
-    auto imgFrame = rgbQ->get<ImgFrame>();
-    cv::imshow("rgb", imgFrame->getCvFrame());
+    shared_ptr<ImgFrame> imgFrame = nullptr;
+    if(mode == RGB) {
+        imgFrame = rgbQ->get<ImgFrame>();
+    } else if(mode == DEPTH) {
+        imgFrame = depthQ->get<ImgFrame>();
+    }
+
+    if(imgFrame) {
+        cv::imshow("OAK", imgFrame->getCvFrame());
+    }
     int key = cv::waitKey(1);
-    if(tolower(key) == 'q') {
-        alive = false;
+    switch(tolower(key)) {
+        case 'r':
+            mode = RGB;
+            break;
+        case 'd':
+            mode = DEPTH;
+            break;
     }
 }
 
